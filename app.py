@@ -190,6 +190,9 @@ def register_user():
     except Exception as e:
         logging.error(f"Error in /register: {str(e)}")
         return jsonify({'error': str(e)}), 500
+@app.route('/')
+def home():
+    return "Server is running!", 200
 
 if __name__ == '__main__':
     (app.run(debug=True))

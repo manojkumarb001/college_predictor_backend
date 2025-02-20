@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import mysql.connector
 import logging
+import os
 
 from flask_cors import CORS
 
@@ -10,15 +11,15 @@ CORS(app)
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
-# Database connection
+# Database Connection
 def get_db_connection():
     return mysql.connector.connect(
-        host="localhost",
-        user="root",
-        password="manoj",
-        database="college_predictor"
+        host=os.getenv("MYSQL_ADDON_HOST"),
+        user=os.getenv("MYSQL_ADDON_USER"),
+        password=os.getenv("MYSQL_ADDON_PASSWORD"),
+        database=os.getenv("MYSQL_ADDON_DB"),
+        port=int(os.getenv("MYSQL_ADDON_PORT"))
     )
-
 @app.route('/predict', methods=['POST'])
 def predict_colleges():
     try:
@@ -190,9 +191,9 @@ def register_user():
     except Exception as e:
         logging.error(f"Error in /register: {str(e)}")
         return jsonify({'error': str(e)}), 500
-@app.route('/')
+@app.route("/")
 def home():
-    return "Server is running!", 200
+    return "✅ Flask App is Running on Clever Cloud!", 200
 
 if __name__ == '__main__':
     (app.run(debug=True))

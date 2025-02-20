@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 import mysql.connector
 import logging
 import os
+from dotenv import load_dotenv
+
 
 from flask_cors import CORS
 
@@ -11,15 +13,19 @@ CORS(app)
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
-# Database Connection
+
 def get_db_connection():
     return mysql.connector.connect(
-        host=os.getenv("MYSQL_ADDON_HOST"),
-        user=os.getenv("MYSQL_ADDON_USER"),
-        password=os.getenv("MYSQL_ADDON_PASSWORD"),
-        database=os.getenv("MYSQL_ADDON_DB"),
-        port=int(os.getenv("MYSQL_ADDON_PORT"))
+        host=os.getenv("MYSQL_HOST"),
+        user=os.getenv("MYSQL_USER"),
+        password=os.getenv("MYSQL_PASSWORD"),
+        database=os.getenv("MYSQL_DATABASE"),
+        port=int(os.getenv("MYSQL_PORT", 3306))
     )
+
+
+
+
 @app.route('/predict', methods=['POST'])
 def predict_colleges():
     try:

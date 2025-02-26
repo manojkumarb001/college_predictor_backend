@@ -3,27 +3,28 @@ import mysql.connector
 import logging
 import os
 from dotenv import load_dotenv
-
-
 from flask_cors import CORS
 
+# ✅ Load environment variables from .env
+load_dotenv()
+
 app = Flask(__name__)
-CORS(app) 
+CORS(app)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
 def get_db_connection():
     return mysql.connector.connect(
-        # host=os.getenv("MYSQL_HOST"),
-        # user=os.getenv("MYSQL_USER"),
-        # password=os.getenv("MYSQL_PASSWORD"),
-        # database=os.getenv("MYSQL_DATABASE"),
-        # port=int(os.getenv("MYSQL_PORT"))
-         host="localhost",
-        user="root",
-        password="manoj",
-        database="college_predictor"
+        host=os.getenv("MYSQL_HOST"),
+        user=os.getenv("MYSQL_USER"),
+        password=os.getenv("MYSQL_PASSWORD"),
+        database=os.getenv("MYSQL_DATABASE"),
+        port=int(os.getenv("MYSQL_PORT",38986))
+        #  host="localhost",
+        # user="root",
+        # password="manoj",
+        # database="college_predictor"
     )
 
 
@@ -70,6 +71,23 @@ def predict_colleges():
     except Exception as e:
         logging.error(f"❌ Error in /predict: {str(e)}")
         return jsonify({"error": "An error occurred while predicting colleges."}), 500
+
+@app.route('/colleges', methods=['GET'])
+def get_colleges():
+    print(os.getenv("MYSQL_USER"))  # Check if it prints the correct username
+
+    """Fetch all colleges from the database."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM Branch LIMIT 10;")  # Fetch 10 records
+        colleges = cursor.fetchall()
+        conn.close()
+        return jsonify(colleges)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/categories', methods=['GET'])
 def get_categories():
     try:
@@ -205,4 +223,11 @@ def home():
     return "✅ Flask App is Running on Clever Cloud!", 200
 
 if __name__ == '__main__':
+    import os
+
+    print("MYSQL_USER:", os.getenv("MYSQL_USER"))
+    print("MYSQL_PASSWORD:", os.getenv("MYSQL_PASSWORD"))
+    print("MYSQL_HOST:", os.getenv("MYSQL_HOST"))
+    print("MYSQL_DATABASE:", os.getenv("MYSQL_DATABASE"))
+
     (app.run(debug=True))

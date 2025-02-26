@@ -1,15 +1,20 @@
 import mysql.connector
 import pandas as pd
 from mysql.connector import Error
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
 def get_db_connection():
     """Establish and return a database connection."""
     try:
         connection = mysql.connector.connect(
-            host="localhost",
-            user="root",  # Update with your MySQL username
-            password="manoj",  # Update with your MySQL password
-            database="college_predictor"
+            host=os.getenv("MYSQL_HOST"),
+            user=os.getenv("MYSQL_USER"),
+            password=os.getenv("MYSQL_PASSWORD"),
+            database=os.getenv("MYSQL_DATABASE"),
+            port=int(os.getenv("MYSQL_PORT")),
+            autocommit=False  # Disable autocommit for batch transactions
         )
         if connection.is_connected():
             print("✅ Successfully connected to the database.")
@@ -19,88 +24,77 @@ def get_db_connection():
         return None
 
 def populate_colleges():
-    """Populate the 'colleges' and 'college_location' tables with data from Excel files."""
+    """Populate the 'colleges' and 'college_location' tables with bulk inserts."""
     conn = get_db_connection()
     if conn is None:
         return  # Stop if no connection could be established
 
     cursor = conn.cursor()
 
-    # File paths for all Excel data
+    # File paths for Excel data
     file_paths = [
-    r"C:\Users\manoj\Prodigy_Infotech_Internship\College predictor\clg predictor 3.0\college-predictor\backend\static\college_data\Round1.xlsx",
-    r"C:\Users\manoj\Prodigy_Infotech_Internship\College predictor\clg predictor 3.0\college-predictor\backend\static\college_data\Round2.xlsx",
-    r"C:\Users\manoj\Prodigy_Infotech_Internship\College predictor\clg predictor 3.0\college-predictor\backend\static\college_data\Round3.xlsx",
-    r"C:\Users\manoj\Prodigy_Infotech_Internship\College predictor\clg predictor 3.0\college-predictor\backend\static\college_data\college_location.xlsx"  # New file path for college_location
-]
+        r"C:\Users\manoj\Prodigy_Infotech_Internship\College predictor\clg predictor 3.0\college-predictor\backend\static\college_data\Round1.xlsx",
+        r"C:\Users\manoj\Prodigy_Infotech_Internship\College predictor\clg predictor 3.0\college-predictor\backend\static\college_data\Round2.xlsx",
+        r"C:\Users\manoj\Prodigy_Infotech_Internship\College predictor\clg predictor 3.0\college-predictor\backend\static\college_data\Round3.xlsx",
+        r"C:\Users\manoj\Prodigy_Infotech_Internship\College predictor\clg predictor 3.0\college-predictor\backend\static\college_data\college_location.xlsx"
+    ]
 
-
-    # Process each Excel file
-    for file_path in file_paths:
-        try:
+    try:
+        for file_path in file_paths:
             df = pd.read_excel(file_path)
 
-            # Clean column names by removing spaces and newlines
+            # Clean column names
             df.columns = df.columns.str.upper().str.replace(' ', '_').str.replace('\n', '')
 
             print(f"📂 Processing file: {file_path}")
-            print("🔹 Cleaned Columns:", df.columns)  # Print cleaned column names
 
-            # Check for data from college_location.xlsx file
+            # Bulk Insert for 'college_location'
             if 'CODE' in df.columns and 'COLLEGE_NAME' in df.columns and 'COLLEGE_DISTRICT' in df.columns:
-                print(f"🔹 'college_location.xlsx' file found and processing")
-                for _, row in df.iterrows():
-                    college_code = row['CODE']
-                    college_name = row['COLLEGE_NAME']
-                    college_district = row['COLLEGE_DISTRICT']
+                print("🔹 Bulk inserting into college_location")
+                college_location_data = [
+                    (row['CODE'], row['COLLEGE_NAME'], row['COLLEGE_DISTRICT'])
+                    for _, row in df.iterrows()
+                ]
+                cursor.executemany(
+                    """INSERT INTO college_location (code, college_name, college_district) VALUES (%s, %s, %s)""",
+                    college_location_data
+                )
 
-                    # SQL Query to Insert Data into college_location table
-                    sql = """INSERT INTO college_location (code, college_name, college_district)
-                             VALUES (%s, %s, %s)"""
-                    cursor.execute(sql, (college_code, college_name, college_district))
+            # Bulk Insert for 'colleges'
+            elif 'AGGRMARK' in df.columns:
+                print("🔹 Bulk inserting into colleges")
+                colleges_data = [
+                    (
+                        row['COLLEGENAME'], row['BRANCHCODE'], row['COLLEGECODE'],
+                        row['COMMUNITY'], validate_cutoff(row['AGGRMARK']),
+                        row['DISTRICT'] if isinstance(row['DISTRICT'], str) else "Unknown",
+                        row['COLLEGECODE']
+                    )
+                    for _, row in df.iterrows() if validate_cutoff(row['AGGRMARK']) is not None
+                ]
+                cursor.executemany(
+                    """INSERT INTO colleges (college_name, branch, branch_code, community, average_cutoff, district, college_code) 
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                    colleges_data
+                )
 
-            else:
-                # Check if 'AGGRMARK' exists in the file (for colleges data)
-                if 'AGGRMARK' in df.columns:
-                    print(f"🔹 'AGGRMARK' column found in file: {file_path}")
-                    for _, row in df.iterrows():
-                        # Validate cutoff value
-                        average_cutoff_value = validate_cutoff(row['AGGRMARK'])
+        conn.commit()  # Commit all changes in one go
+        print("🎉 Database updated successfully!")
 
-                        if average_cutoff_value is not None:
-                            # Ensure COLLEGENAME is a valid string
-                            college_name = row['COLLEGENAME']
-                            if isinstance(college_name, str) and college_name.strip():  # Check if COLLEGENAME is valid
-                                district_value = row['DISTRICT'] if isinstance(row['DISTRICT'], str) else "Unknown"
-                            else:
-                                district_value = "Unknown"  # Set to "Unknown" if COLLEGENAME is invalid
+    except Exception as e:
+        conn.rollback()  # Rollback in case of errors
+        print(f"❌ Error inserting data: {e}")
 
-                            # SQL Query to Insert Data into colleges table
-                            sql = """INSERT INTO colleges (college_name, branch, branch_code, community, average_cutoff, district, college_code)
-                                     VALUES (%s, %s, %s, %s, %s, %s, %s)"""
-                            cursor.execute(sql, (college_name, row['BRANCHCODE'], row['COLLEGECODE'],
-                                                 row['COMMUNITY'], average_cutoff_value, district_value, row['COLLEGECODE']))
-                        else:
-                            print(f"❌ Invalid AGGRMARK value for APPLNNO {row['APPLNNO']}")
-                    print(f"✅ Data from {file_path} inserted successfully.")
-                else:
-                    print(f"❌ Column mismatch or invalid data in file: {file_path}")
-                    continue
-
-        except Exception as e:
-            print(f"❌ Error processing file {file_path}: {e}")
-            continue
-
-    conn.commit()  # Commit all changes
-    conn.close()   # Close database connection
-    print("🎉 Database updated successfully!")
+    finally:
+        cursor.close()
+        conn.close()
 
 def validate_cutoff(value):
     """Validate and clean cutoff values."""
     try:
         return float(value) if pd.notnull(value) else None
     except ValueError:
-        return None  # Return None if conversion fails
+        return None
 
 if __name__ == "__main__":
     populate_colleges()
